@@ -204,6 +204,34 @@ def read_mnist_file(
     return xytp
 
 
+def read_fixation_mnist_file(
+    bin_file: Union[str, BinaryIO], dtype: np.dtype, is_stream: Optional[bool] = False
+):
+    """Reads the events contained in FN-MNIST dataset.
+
+    Code adapted from https://data.mendeley.com/datasets/559n9zbb7c/2/files/5f1496c7-a09e-4520-ad7f-dcf381aa957a
+    """
+    if is_stream:
+        raw_data = np.frombuffer(bin_file.read(), dtype=np.uint8).astype(np.uint32)
+    else:
+        with open(bin_file, "rb") as fp:
+            raw_data = np.fromfile(fp, dtype=np.uint8).astype(np.uint32)
+
+    all_x = (raw_data[0::5] & 255)
+    all_y = (raw_data[1::5] & 255)
+    all_p = (raw_data[2::5] & 128) >> 7  # bit 7
+    all_ts = ((raw_data[2::5] & 127) << 16) | ((raw_data[3::5] & 255) << 8) | (raw_data[4::5] & 255)
+
+    xytp = make_structured_array(
+        all_x,
+        all_y,
+        all_ts,
+        all_p,
+        dtype=dtype,
+    )
+    return xytp
+
+
 def read_aedat_header_from_file(filename):
     """Get the aedat file version and start index of the binary data.
 
