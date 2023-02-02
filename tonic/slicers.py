@@ -2,9 +2,10 @@ from dataclasses import dataclass
 from typing import Any, List, Tuple
 
 import numpy as np
-from typing_extensions import Protocol
+from typing_extensions import Protocol, runtime_checkable
 
 
+@runtime_checkable
 class Slicer(Protocol):
     """Base protocol class for slicers in Tonic.
 
@@ -101,7 +102,7 @@ class SliceByTime:
         return [data[start:end] for start, end in metadata], targets
 
 
-@dataclass
+@dataclass(frozen=True)
 class SliceByTimeBins:
     """
     Slices data and targets along fixed number of bins of time length time_duration / bin_count * (1 + overlap).

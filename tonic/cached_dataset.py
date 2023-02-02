@@ -1,7 +1,7 @@
 import logging
 import os
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable, Optional, Tuple, Union
 from warnings import warn
@@ -36,20 +36,17 @@ class MemoryCachedDataset:
     transform: Optional[Callable] = None
     target_transform: Optional[Callable] = None
     transforms: Optional[Callable] = None
-
-    def __post_init__(self):
-        super().__init__()
-        self.data_dict = {}
+    samples_dict: dict = field(init=False, default_factory=dict)
 
     def __getitem__(self, index):
         try:
-            data, targets = self.data_dict[index]
+            data, targets = self.samples_dict[index]
         except KeyError as _:
             data, targets = self.dataset[index]
             if self.device is not None:
                 data = data.to(self.device)
                 targets = targets.to(self.device)
-            self.data_dict[index] = (data, targets)
+            self.samples_dict[index] = (data, targets)
 
         if self.transform is not None:
             data = self.transform(data)
@@ -76,6 +73,8 @@ class DiskCachedDataset:
               with an old file. To avoid this you either have to clear your cache folder manually when needed, incorporate all
               transformation parameters into the cache path which creates a tree of cache files or use reset_cache=True.
 
+    .. note:: Caching Pytorch tensors will write numpy arrays to disk, so be careful when loading the sample and you expect a tensor. The recommendation is to defer the transform to tensor as late as possible.
+
     Parameters:
         dataset:
             Dataset to be cached to disk. Can be None, if only files in cache_path should be used.
@@ -92,8 +91,8 @@ class DiskCachedDataset:
         num_copies:
             Number of copies of each sample to be cached.
             This is a useful parameter if the dataset is being augmented with slow, random transforms.
-        compression:
-            Whether to apply compression (if true uses lzf compression)
+        compress:
+            Whether to apply lightweight lzf compression, default is True.
     """
 
     dataset: Iterable
@@ -103,7 +102,7 @@ class DiskCachedDataset:
     target_transform: Optional[Callable] = None
     transforms: Optional[Callable] = None
     num_copies: int = 1
-    compression: bool = True
+    compress: bool = True
 
     def __post_init__(self):
         super().__init__()
@@ -144,10 +143,10 @@ class DiskCachedDataset:
 
             data, targets = self.dataset[item]
             save_to_disk_cache(
-                data, targets, file_path=file_path, compression=self.compression
+                data, targets, file_path=file_path, compress=self.compress
             )
-            # format might change during save to hdf5,
-            # i.e. tensors -> np arrays
+            # format might change during save to hdf5, i.e. tensors -> np arrays
+            # We load the sample here again to keep the output format consistent.
             data, targets = load_from_disk_cache(file_path)
 
         if self.transform is not None:
@@ -163,7 +162,7 @@ class DiskCachedDataset:
 
 
 def save_to_disk_cache(
-    data, targets, file_path: Union[str, Path], compression: bool = True
+    data, targets, file_path: Union[str, Path], compress: bool = True
 ) -> None:
     """
     Save data to caching path on disk in an hdf5 file. Can deal with data
@@ -172,7 +171,7 @@ def save_to_disk_cache(
         data: numpy ndarray-like or a list thereof.
         targets: same as data, can be None.
         file_path: caching file path.
-        compression: Whether to apply compression. (default = True - uses lzf compression)
+        compress: Whether to apply compression. (default = True - uses lzf compression)
     """
     with h5py.File(file_path, "w") as f:
         for name, data in zip(["data", "target"], [data, targets]):
@@ -186,7 +185,7 @@ def save_to_disk_cache(
                             f"{name}/{i}/{key}",
                             data=item,
                             compression="lzf"
-                            if type(item) == np.ndarray and compression
+                            if type(item) == np.ndarray and compress
                             else None,
                         )
                 else:
@@ -194,7 +193,7 @@ def save_to_disk_cache(
                         f"{name}/{i}",
                         data=data_piece,
                         compression="lzf"
-                        if type(data_piece) == np.ndarray and compression
+                        if type(data_piece) == np.ndarray and compress
                         else None,
                     )
 

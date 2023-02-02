@@ -4,6 +4,7 @@ from typing import Any, Callable, Iterator, Optional, Tuple, Union
 
 import numpy as np
 from expelliarmus import Wizard
+from expelliarmus.wizard.clib import event_t
 from torchdata.datapipes.iter import FileLister, IterDataPipe
 
 from .utils._dataset import Dataset, Sample
@@ -14,13 +15,9 @@ class NCARSFileReader(IterDataPipe[Sample]):
     def __init__(
         self,
         dp: IterDataPipe[str],
-        dtype: Optional[np.dtype] = np.dtype(
-            [("t", np.int64), ("x", np.int16), ("y", np.int16), ("p", bool)]
-        ),
     ) -> None:
         self.dp = dp
-        self.dtype = dtype
-        self._wizard = Wizard(encoding="dat", dtype=dtype)
+        self._wizard = Wizard(encoding="dat")
 
     def __iter__(self) -> Iterator[Sample]:
         for fname in self.dp:
@@ -40,7 +37,7 @@ class NCARSFileReader(IterDataPipe[Sample]):
 class NCARS(Dataset):
     """N-CARS <https://www.prophesee.ai/2018/03/13/dataset-n-cars/>
 
-    This datasets needs 'expelliarmus' installed on the system.
+    This datasets needs 'expelliarmus' installed on the system. Events have "txyp" ordering.
     ::
 
         @article{Sironi_2018_CVPR,
@@ -59,7 +56,7 @@ class NCARS(Dataset):
         transforms (callable, optional): A callable of transforms that is applied to both data and labels at the same time.
     """
 
-    _DTYPE = np.dtype([("t", np.int64), ("x", np.int16), ("y", np.int16), ("p", bool)])
+    _DTYPE = event_t
     _TRAIN_PATH = "n-cars_train"
     _TEST_PATH = "n-cars_test"
     sensor_size = (120, 100, 2)
@@ -109,5 +106,5 @@ class NCARS(Dataset):
         fpath = os.path.join(self._root, fpath)
         dp = FileLister(str(fpath), recursive=True).filter(self._filter)
         # Reading data to structured NumPy array and integer target.
-        dp = NCARSFileReader(dp, dtype=self._DTYPE)
+        dp = NCARSFileReader(dp)
         return dp
